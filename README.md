@@ -17,10 +17,10 @@ composer require smwks/superprocess
 ## Quick start
 
 ```php
-use SMWks\Superprocess\Child;
-use SMWks\Superprocess\CreateReason;
-use SMWks\Superprocess\ExitReason;
-use SMWks\Superprocess\SuperProcess;
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\CreateReason;
+use SMWks\SuperProcess\ExitReason;
+use SMWks\SuperProcess\SuperProcess;
 
 $sp = new SuperProcess;
 $sp->command('php artisan inspire:loop')
@@ -68,7 +68,7 @@ On startup `run()` spawns `min` children. When a child exits:
 1. `onChildExit` fires with an `ExitReason`.
 2. If running count drops below `min`, a replacement is spawned with `CreateReason::Replacement`.
 
-The master never exits the event loop on its own — send it `SIGTERM` (or call `signal(posix_getpid(), ProcessSignal::STOP)` from within a callback) to trigger a graceful shutdown.
+The master never exits the event loop on its own — send it `SIGTERM` (or call `signal(posix_getpid(), ProcessSignal::Stop)` from within a callback) to trigger a graceful shutdown.
 
 ### Graceful shutdown
 
@@ -151,11 +151,11 @@ ExitReason::Killed          // force-killed with SIGKILL
 ExitReason::Unknown         // status could not be determined
 
 // Signal shortcuts (values map to POSIX signal numbers)
-ProcessSignal::STOP         // SIGTERM — graceful stop
-ProcessSignal::KILL         // SIGKILL — force kill
-ProcessSignal::RELOAD       // SIGHUP  — reload
-ProcessSignal::USR1         // SIGUSR1
-ProcessSignal::USR2         // SIGUSR2
+ProcessSignal::Stop         // SIGTERM — graceful stop
+ProcessSignal::Kill         // SIGKILL — force kill
+ProcessSignal::Reload       // SIGHUP  — reload
+ProcessSignal::Usr1         // SIGUSR1
+ProcessSignal::Usr2         // SIGUSR2
 ```
 
 ### `Child` properties

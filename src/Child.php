@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess;
+namespace SMWks\SuperProcess;
 
 final class Child
 {
     public bool $running = true;
+
+    public bool $terminating = false;
 
     public int $exitCode = 0;
 

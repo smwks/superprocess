@@ -12,13 +12,13 @@
  * Comment out whichever you don't want to run.
  */
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
-use SMWks\Superprocess\Child;
-use SMWks\Superprocess\CreateReason;
-use SMWks\Superprocess\ExitReason;
-use SMWks\Superprocess\ProcessSignal;
-use SMWks\Superprocess\SuperProcess;
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\CreateReason;
+use SMWks\SuperProcess\ExitReason;
+use SMWks\SuperProcess\ProcessSignal;
+use SMWks\SuperProcess\SuperProcess;
 
 // =============================================================================
 // EXAMPLE 2 — Closure workers with structured IPC messages
@@ -31,35 +31,35 @@ use SMWks\Superprocess\SuperProcess;
 //               scaleLimits(), structured JSON IPC protocol
 // =============================================================================
 
-echo str_repeat('=', 70) . "\n";
+echo str_repeat('=', 70)."\n";
 echo "EXAMPLE 2: closure workers with IPC messages\n";
-echo str_repeat('=', 70) . "\n\n";
+echo str_repeat('=', 70)."\n\n";
 
-$results   = [];
+$results = [];
 $workerCount = 3;
 
 $sp2 = new SuperProcess;
 $sp2->closure(function (mixed $socket): void {
-        // Each worker has a randomly seeded workload so outputs differ.
-        $pid   = getmypid();
-        $steps = random_int(2, 5);
+    // Each worker has a randomly seeded workload so outputs differ.
+    $pid = getmypid();
+    $steps = random_int(2, 5);
 
-        for ($i = 1; $i <= $steps; $i++) {
-            fwrite($socket, json_encode([
-                'type'     => 'progress',
-                'pid'      => $pid,
-                'step'     => $i,
-                'of'       => $steps,
-            ]) . "\n");
-            sleep(1);
-        }
-
+    for ($i = 1; $i <= $steps; $i++) {
         fwrite($socket, json_encode([
-            'type'   => 'done',
-            'pid'    => $pid,
-            'result' => $steps * 100,   // pretend result value
-        ]) . "\n");
-    })
+            'type' => 'progress',
+            'pid' => $pid,
+            'step' => $i,
+            'of' => $steps,
+        ])."\n");
+        sleep(1);
+    }
+
+    fwrite($socket, json_encode([
+        'type' => 'done',
+        'pid' => $pid,
+        'result' => $steps * 100,   // pretend result value
+    ])."\n");
+})
     ->scaleLimits(min: $workerCount, max: $workerCount)
 
     ->onChildCreate(function (Child $child, CreateReason $reason): void {
@@ -76,7 +76,7 @@ $sp2->closure(function (mixed $socket): void {
             // Once all workers have reported, stop the supervisor.
             if (count($results) === $workerCount) {
                 echo "[master] all workers done — shutting down\n";
-                $sp2->signal(posix_getpid(), ProcessSignal::STOP);
+                $sp2->signal(posix_getpid(), ProcessSignal::Stop);
             }
         }
     })

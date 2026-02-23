@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess;
+namespace SMWks\SuperProcess;
 
-enum ExitReason
+enum ExitReason: string
 {
-    case Normal;
-    case Signal;
-    case Killed;
-    case Unknown;
+    case Normal = 'NORMAL';
+    case Signal = 'SIGNAL';
+    case Killed = 'KILLED';
+    case Unknown = 'UNKNOWN';
 }

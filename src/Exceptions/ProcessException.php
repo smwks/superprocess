@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess\Exceptions;
+namespace SMWks\SuperProcess\Exceptions;
 
 use RuntimeException;
 

@@ -12,13 +12,11 @@
  * Comment out whichever you don't want to run.
  */
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
-use SMWks\Superprocess\Child;
-use SMWks\Superprocess\CreateReason;
-use SMWks\Superprocess\ExitReason;
-use SMWks\Superprocess\ProcessSignal;
-use SMWks\Superprocess\SuperProcess;
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\ProcessSignal;
+use SMWks\SuperProcess\SuperProcess;
 
 // =============================================================================
 // EXAMPLE 3 — Signal handling and graceful shutdown
@@ -32,18 +30,18 @@ use SMWks\Superprocess\SuperProcess;
 // Demonstrates: onSignal(), ProcessSignal, graceful shutdown
 // =============================================================================
 
-echo str_repeat('=', 70) . "\n";
+echo str_repeat('=', 70)."\n";
 echo "EXAMPLE 3: signal handling and graceful shutdown\n";
-echo str_repeat('=', 70) . "\n\n";
-echo "PID: ";
+echo str_repeat('=', 70)."\n\n";
+echo 'PID: ';
 echo posix_getpid();
-echo str_repeat('=', 70) . "\n\n";
+echo str_repeat('=', 70)."\n\n";
 
 $cwd = getcwd();
 
 $sp3 = new SuperProcess;
 $sp3
-    ->command("php $cwd/scratch/example3-child.php")
+    ->command("php $cwd/examples/scripts/hello-world-time.php")
     ->scaleLimits(2, 2)
     ->heartbeat(10, function (SuperProcess $super): void {
         echo "[heartbeat 10s]\n";

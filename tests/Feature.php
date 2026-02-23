@@ -1,22 +1,22 @@
 <?php
 
-use SMWks\Superprocess\Child;
-use SMWks\Superprocess\CreateReason;
-use SMWks\Superprocess\Exceptions\ProcessException;
-use SMWks\Superprocess\ExitReason;
-use SMWks\Superprocess\ProcessSignal;
-use SMWks\Superprocess\SuperProcess;
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\CreateReason;
+use SMWks\SuperProcess\Exceptions\ProcessException;
+use SMWks\SuperProcess\ExitReason;
+use SMWks\SuperProcess\ProcessSignal;
+use SMWks\SuperProcess\SuperProcess;
 
 // ---------------------------------------------------------------------------
 // ProcessSignal constants
 // ---------------------------------------------------------------------------
 
-it('defines expected signal constants', function (): void {
-    expect(ProcessSignal::STOP)->toBe(SIGTERM)
-        ->and(ProcessSignal::KILL)->toBe(SIGKILL)
-        ->and(ProcessSignal::RELOAD)->toBe(SIGHUP)
-        ->and(ProcessSignal::USR1)->toBe(SIGUSR1)
-        ->and(ProcessSignal::USR2)->toBe(SIGUSR2);
+it('defines expected signal values', function (): void {
+    expect(ProcessSignal::Stop->value)->toBe(SIGTERM)
+        ->and(ProcessSignal::Kill->value)->toBe(SIGKILL)
+        ->and(ProcessSignal::Reload->value)->toBe(SIGHUP)
+        ->and(ProcessSignal::Usr1->value)->toBe(SIGUSR1)
+        ->and(ProcessSignal::Usr2->value)->toBe(SIGUSR2);
 });
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ it('spawns a command child, fires onChildCreate, then exits when SIGTERM sent', 
         ->onChildExit(function (Child $child, ExitReason $reason) use (&$exited, $sp): void {
             $exited[] = ['pid' => $child->pid, 'reason' => $reason];
             // After the child exits, stop the loop
-            $sp->signal(posix_getpid(), SIGTERM);
+            $sp->signal(posix_getpid(), ProcessSignal::Stop);
         });
 
     $sp->run();
@@ -165,10 +165,71 @@ it('spawns a closure child and receives an ipc message', function (): void {
         ->scaleLimits(1, 1)
         ->onChildMessage(function (Child $child, mixed $message) use (&$messages, $sp): void {
             $messages[] = $message;
-            $sp->signal(posix_getpid(), SIGTERM);
+            $sp->signal(posix_getpid(), ProcessSignal::Stop);
         })
         ->run();
 
     expect($messages)->toHaveCount(1)
         ->and($messages[0])->toBe(['hello' => 'world']);
 })->skip('Integration test requires pcntl/posix and spawns real processes');
+
+// ---------------------------------------------------------------------------
+// SuperProcess – scaling
+// ---------------------------------------------------------------------------
+
+it('scaleUp spawns an additional child with ScaleUp create reason', function (): void {
+    $createReasons = [];
+
+    $sp = new SuperProcess;
+    $sp->closure(function (mixed $socket): void { sleep(60); })
+        ->scaleLimits(min: 1, max: 2)
+        ->onChildCreate(function (Child $child, CreateReason $reason) use ($sp, &$createReasons): void {
+            $createReasons[] = $reason;
+
+            if ($reason === CreateReason::Initial) {
+                $sp->scaleUp();
+            }
+
+            if (count($createReasons) === 2) {
+                $sp->signal(posix_getpid(), ProcessSignal::Stop);
+            }
+        })
+        ->run();
+
+    expect($createReasons)->toBe([CreateReason::Initial, CreateReason::ScaleUp]);
+})->skip(! extension_loaded('pcntl'), 'Requires ext-pcntl and ext-posix');
+
+it('scaleDown called twice terminates two different children', function (): void {
+    $exitedPids = [];
+    $childCount = 0;
+    $scaledDown = false;
+
+    $sp = new SuperProcess;
+    $sp->closure(function (mixed $socket): void { sleep(60); })
+        ->scaleLimits(min: 1, max: 3)
+        ->onChildCreate(function (Child $child, CreateReason $reason) use ($sp, &$childCount, &$scaledDown): void {
+            $childCount++;
+
+            // On the first child, immediately scale up to fill the pool to 3
+            if ($childCount === 1) {
+                $sp->scaleUp()->scaleUp();
+            }
+
+            // Once all 3 are up, scale back down by 2 in a single synchronous burst
+            if ($childCount === 3 && ! $scaledDown) {
+                $scaledDown = true;
+                $sp->scaleDown()->scaleDown();
+            }
+        })
+        ->onChildExit(function (Child $child, ExitReason $reason) use ($sp, &$exitedPids): void {
+            $exitedPids[] = $child->pid;
+
+            if (count($exitedPids) === 2) {
+                $sp->signal(posix_getpid(), ProcessSignal::Stop);
+            }
+        })
+        ->run();
+
+    expect($exitedPids)->toHaveCount(2)
+        ->and(array_unique($exitedPids))->toHaveCount(2); // two distinct PIDs, not the same one twice
+})->skip(! extension_loaded('pcntl'), 'Requires ext-pcntl and ext-posix');

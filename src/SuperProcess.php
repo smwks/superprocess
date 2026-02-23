@@ -2,45 +2,41 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess;
+namespace SMWks\SuperProcess;
 
 use Closure;
-use SMWks\Superprocess\Exceptions\ProcessException;
+use SMWks\SuperProcess\Exceptions\ProcessException;
 
-final class SuperProcess
+class SuperProcess
 {
-    private ?string $command = null;
+    protected ?string $command = null;
 
-    private ?Closure $closure = null;
+    protected ?Closure $closure = null;
 
-    private int $minChildren = 1;
+    protected int $minChildren = 1;
 
-    private int $maxChildren = 1;
+    protected int $maxChildren = 1;
 
-    private int $heartbeatInterval = 0;
+    protected int $heartbeatInterval = 0;
 
-    private ?Closure $heartbeatCallback = null;
+    protected ?Closure $heartbeatCallback = null;
 
-    private ?Closure $onChildCreateCallback = null;
+    protected ?Closure $onChildCreateCallback = null;
 
-    private ?Closure $onChildExitCallback = null;
+    protected ?Closure $onChildExitCallback = null;
 
-    private ?Closure $onChildSignalCallback = null;
+    protected ?Closure $onChildSignalCallback = null;
 
-    private ?Closure $onChildMessageCallback = null;
+    protected ?Closure $onChildMessageCallback = null;
 
-    private ?Closure $onChildOutputCallback = null;
+    protected ?Closure $onChildOutputCallback = null;
 
     /** @var array<int, Child> */
-    private array $children = [];
+    protected array $children = [];
 
-    private bool $sigchldPending = false;
+    protected bool $sigchldPending = false;
 
-    private bool $shutdownPending = false;
-
-    // -------------------------------------------------------------------------
-    // Configuration API
-    // -------------------------------------------------------------------------
+    protected bool $shutdownPending = false;
 
     public function command(string $command): static
     {
@@ -72,10 +68,6 @@ final class SuperProcess
         return $this;
     }
 
-    // -------------------------------------------------------------------------
-    // Scaling API
-    // -------------------------------------------------------------------------
-
     public function scaleUp(): static
     {
         if (count($this->children) < $this->maxChildren) {
@@ -89,19 +81,18 @@ final class SuperProcess
 
     public function scaleDown(): static
     {
-        if (count($this->children) > $this->minChildren) {
-            $child = reset($this->children);
+        $active = array_filter($this->children, fn (Child $c) => ! $c->terminating);
+
+        if (count($active) > $this->minChildren) {
+            $child = reset($active);
             if ($child instanceof Child) {
+                $child->terminating = true;
                 posix_kill($child->pid, SIGTERM);
             }
         }
 
         return $this;
     }
-
-    // -------------------------------------------------------------------------
-    // Callback registration
-    // -------------------------------------------------------------------------
 
     public function onChildCreate(Closure $callback): static
     {
@@ -138,10 +129,6 @@ final class SuperProcess
         return $this;
     }
 
-    // -------------------------------------------------------------------------
-    // I/O and control
-    // -------------------------------------------------------------------------
-
     public function sendChildInput(int $pid, string $data): void
     {
         $child = $this->children[$pid] ?? null;
@@ -150,14 +137,10 @@ final class SuperProcess
         }
     }
 
-    public function signal(string|int $pid, int $signal): void
+    public function signal(string|int $pid, ProcessSignal $signal): void
     {
-        posix_kill((int) $pid, $signal);
+        posix_kill((int) $pid, $signal->value);
     }
-
-    // -------------------------------------------------------------------------
-    // Event loop
-    // -------------------------------------------------------------------------
 
     public function run(): void
     {
@@ -219,7 +202,7 @@ final class SuperProcess
                     }
                 }
             } else {
-                // No streams; still honour 1-second tick for heartbeat and signal checks
+                // No streams; still honor 1-second tick for heartbeat and signal checks
                 usleep(100_000);
             }
 
@@ -240,11 +223,7 @@ final class SuperProcess
         $this->shutdown();
     }
 
-    // -------------------------------------------------------------------------
-    // Internal: spawning
-    // -------------------------------------------------------------------------
-
-    private function spawnChild(CreateReason $reason): Child
+    protected function spawnChild(CreateReason $reason): Child
     {
         if ($this->command !== null) {
             return $this->spawnCommandChild($reason);
@@ -253,7 +232,7 @@ final class SuperProcess
         return $this->spawnClosureChild($reason);
     }
 
-    private function spawnCommandChild(CreateReason $reason): Child
+    protected function spawnCommandChild(CreateReason $reason): Child
     {
         $descriptors = [
             0 => ['pipe', 'r'],  // stdin  – master writes
@@ -288,7 +267,7 @@ final class SuperProcess
         );
     }
 
-    private function spawnClosureChild(CreateReason $reason): Child
+    protected function spawnClosureChild(CreateReason $reason): Child
     {
         $socketPair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
 
@@ -333,11 +312,7 @@ final class SuperProcess
         );
     }
 
-    // -------------------------------------------------------------------------
-    // Internal: stream dispatch
-    // -------------------------------------------------------------------------
-
-    private function dispatchStreamData(mixed $stream): void
+    protected function dispatchStreamData(mixed $stream): void
     {
         if (! is_resource($stream)) {
             return;
@@ -345,7 +320,7 @@ final class SuperProcess
 
         $child = $this->findChildByStream($stream);
 
-        if (! $child instanceof \SMWks\Superprocess\Child) {
+        if (! $child instanceof Child) {
             return;
         }
 
@@ -363,7 +338,7 @@ final class SuperProcess
         }
     }
 
-    private function dispatchChildMessage(Child $child, string $rawData): void
+    protected function dispatchChildMessage(Child $child, string $rawData): void
     {
         if (! $this->onChildMessageCallback instanceof \Closure) {
             return;
@@ -381,7 +356,7 @@ final class SuperProcess
         }
     }
 
-    private function dispatchChildSignalToAll(int $signal): void
+    protected function dispatchChildSignalToAll(int $signal): void
     {
         if (! $this->onChildSignalCallback instanceof \Closure) {
             return;
@@ -392,11 +367,7 @@ final class SuperProcess
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Internal: child lifecycle
-    // -------------------------------------------------------------------------
-
-    private function reapChildren(): void
+    protected function reapChildren(): void
     {
         while (true) {
             $status = 0;
@@ -431,6 +402,7 @@ final class SuperProcess
                 stderr: null,
                 ipcChannel: null,
             );
+
             $exitedChild->running = false;
             $exitedChild->exitCode = $exitCode;
             $exitedChild->exitReason = $exitReason;
@@ -441,7 +413,7 @@ final class SuperProcess
         }
     }
 
-    private function resolveExitReason(int $status): ExitReason
+    protected function resolveExitReason(int $status): ExitReason
     {
         if (pcntl_wifexited($status)) {
             return pcntl_wexitstatus($status) === 0 ? ExitReason::Normal : ExitReason::Normal;
@@ -456,7 +428,7 @@ final class SuperProcess
         return ExitReason::Unknown;
     }
 
-    private function maintainMinimum(): void
+    protected function maintainMinimum(): void
     {
         $running = count($this->children);
 
@@ -468,7 +440,7 @@ final class SuperProcess
         }
     }
 
-    private function closeChildStreams(Child $child): void
+    protected function closeChildStreams(Child $child): void
     {
         foreach ([$child->stdin, $child->stdout, $child->stderr, $child->ipcChannel] as $stream) {
             if (is_resource($stream)) {
@@ -481,11 +453,7 @@ final class SuperProcess
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Internal: shutdown
-    // -------------------------------------------------------------------------
-
-    private function shutdown(): void
+    protected function shutdown(): void
     {
         // Send SIGTERM to all running children
         foreach ($this->children as $child) {
@@ -520,27 +488,15 @@ final class SuperProcess
         $this->children = [];
     }
 
-    // -------------------------------------------------------------------------
-    // Internal: helpers
-    // -------------------------------------------------------------------------
-
-    private function fireOnChildCreate(Child $child): void
+    protected function fireOnChildCreate(Child $child): void
     {
         if ($this->onChildCreateCallback instanceof \Closure) {
             ($this->onChildCreateCallback)($child, $child->createReason);
         }
     }
 
-    private function findChildByStream(mixed $stream): ?Child
+    protected function findChildByStream(mixed $stream): ?Child
     {
-        foreach ($this->children as $child) {
-            if (
-                in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true)
-            ) {
-                return $child;
-            }
-        }
-
-        return null;
+        return array_find($this->children, fn ($child) => in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true));
     }
 }

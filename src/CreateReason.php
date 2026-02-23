@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess;
+namespace SMWks\SuperProcess;
 
-enum CreateReason
+enum CreateReason: string
 {
-    case Initial;
-    case Replacement;
-    case ScaleUp;
+    case Initial = 'INITIAL';
+    case Replacement = 'REPLACEMENT';
+    case ScaleUp = 'SCALE_UP';
 }

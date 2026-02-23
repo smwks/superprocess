@@ -2,17 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SMWks\Superprocess;
+namespace SMWks\SuperProcess;
 
-final class ProcessSignal
+enum ProcessSignal: int
 {
-    public const int STOP = SIGTERM;
-
-    public const int KILL = SIGKILL;
-
-    public const int RELOAD = SIGHUP;
-
-    public const int USR1 = SIGUSR1;
-
-    public const int USR2 = SIGUSR2;
+    case Stop = 15; // SIGTERM;
+    case Kill = 9; // SIGKILL;
+    case Reload = 1; // SIGHUP;
+    case Usr1 = 30; // SIGUSR1;
+    case Usr2 = 31; // SIGUSR2;
 }

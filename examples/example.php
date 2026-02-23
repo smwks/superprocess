@@ -12,13 +12,13 @@
  * Comment out whichever you don't want to run.
  */
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
-use SMWks\Superprocess\Child;
-use SMWks\Superprocess\CreateReason;
-use SMWks\Superprocess\ExitReason;
-use SMWks\Superprocess\ProcessSignal;
-use SMWks\Superprocess\SuperProcess;
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\CreateReason;
+use SMWks\SuperProcess\ExitReason;
+use SMWks\SuperProcess\ProcessSignal;
+use SMWks\SuperProcess\SuperProcess;
 
 // =============================================================================
 // EXAMPLE 1 — Command supervisor
@@ -32,9 +32,9 @@ use SMWks\Superprocess\SuperProcess;
 //               onChildExit(), heartbeat(), ProcessSignal
 // =============================================================================
 
-echo str_repeat('=', 70) . "\n";
+echo str_repeat('=', 70)."\n";
 echo "EXAMPLE 1: command supervisor\n";
-echo str_repeat('=', 70) . "\n\n";
+echo str_repeat('=', 70)."\n\n";
 
 $startTime = time();
 
@@ -49,14 +49,14 @@ $workerScript = <<<'PHP'
 PHP;
 
 $sp = new SuperProcess;
-$sp->command('php -r ' . escapeshellarg($workerScript))
+$sp->command('php -r '.escapeshellarg($workerScript))
     ->scaleLimits(min: 2, max: 4)
 
     ->onChildCreate(function (Child $child, CreateReason $reason): void {
         $label = match ($reason) {
-            CreateReason::Initial     => 'initial start',
+            CreateReason::Initial => 'initial start',
             CreateReason::Replacement => 'replacement after exit',
-            CreateReason::ScaleUp     => 'scale-up request',
+            CreateReason::ScaleUp => 'scale-up request',
         };
         echo "[master] spawned pid {$child->pid}  ({$label})\n";
     })
@@ -72,9 +72,9 @@ $sp->command('php -r ' . escapeshellarg($workerScript))
 
     ->onChildExit(function (Child $child, ExitReason $reason): void {
         $detail = match ($reason) {
-            ExitReason::Normal  => "exit code {$child->exitCode}",
-            ExitReason::Signal  => 'killed by signal',
-            ExitReason::Killed  => 'force-killed (SIGKILL)',
+            ExitReason::Normal => "exit code {$child->exitCode}",
+            ExitReason::Signal => 'killed by signal',
+            ExitReason::Killed => 'force-killed (SIGKILL)',
             ExitReason::Unknown => 'unknown',
         };
         echo "[master] pid {$child->pid} exited — {$detail}\n";
@@ -87,7 +87,7 @@ $sp->command('php -r ' . escapeshellarg($workerScript))
 
         if ($elapsed >= 15) {
             echo "[heartbeat] time limit reached — sending STOP\n";
-            $super->signal(posix_getpid(), ProcessSignal::STOP);
+            $super->signal(posix_getpid(), ProcessSignal::Stop);
         }
     })
 
