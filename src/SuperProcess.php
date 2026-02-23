@@ -241,6 +241,7 @@ class SuperProcess
             3 => ['pipe', 'w'],  // fd3    – structured messages (onChildMessage)
         ];
 
+        /** @var array{0: resource, 1: resource, 2: resource, 3: resource} $pipes */
         $pipes = [];
         $process = proc_open((string) $this->command, $descriptors, $pipes);
 
