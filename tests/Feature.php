@@ -12,11 +12,11 @@ use SMWks\SuperProcess\SuperProcess;
 // ---------------------------------------------------------------------------
 
 it('defines expected signal values', function (): void {
-    expect(ProcessSignal::Stop->value)->toBe(SIGTERM)
-        ->and(ProcessSignal::Kill->value)->toBe(SIGKILL)
-        ->and(ProcessSignal::Reload->value)->toBe(SIGHUP)
-        ->and(ProcessSignal::Usr1->value)->toBe(SIGUSR1)
-        ->and(ProcessSignal::Usr2->value)->toBe(SIGUSR2);
+    expect(ProcessSignal::Stop->signum())->toBe(SIGTERM)
+        ->and(ProcessSignal::Kill->signum())->toBe(SIGKILL)
+        ->and(ProcessSignal::Reload->signum())->toBe(SIGHUP)
+        ->and(ProcessSignal::Usr1->signum())->toBe(SIGUSR1)
+        ->and(ProcessSignal::Usr2->signum())->toBe(SIGUSR2);
 });
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,9 @@ it('scaleUp spawns an additional child with ScaleUp create reason', function ():
     $createReasons = [];
 
     $sp = new SuperProcess;
-    $sp->closure(function (mixed $socket): void { sleep(60); })
+    $sp->closure(function (mixed $socket): void {
+        sleep(60);
+    })
         ->scaleLimits(min: 1, max: 2)
         ->onChildCreate(function (Child $child, CreateReason $reason) use ($sp, &$createReasons): void {
             $createReasons[] = $reason;
@@ -205,7 +207,9 @@ it('scaleDown called twice terminates two different children', function (): void
     $scaledDown = false;
 
     $sp = new SuperProcess;
-    $sp->closure(function (mixed $socket): void { sleep(60); })
+    $sp->closure(function (mixed $socket): void {
+        sleep(60);
+    })
         ->scaleLimits(min: 1, max: 3)
         ->onChildCreate(function (Child $child, CreateReason $reason) use ($sp, &$childCount, &$scaledDown): void {
             $childCount++;

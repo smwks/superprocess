@@ -32,18 +32,18 @@ $sp
 
     ->onChildCreate(function (Child $child, CreateReason $reason): void {
         $label = match ($reason) {
-            CreateReason::Initial     => 'initial start',
+            CreateReason::Initial => 'initial start',
             CreateReason::Replacement => 'replacement',
-            CreateReason::ScaleUp     => 'scale-up',
+            CreateReason::ScaleUp => 'scale-up',
         };
         echo "[master] child {$child->pid} started ({$label})\n";
     })
 
     ->onChildExit(function (Child $child, ExitReason $reason): void {
         $label = match ($reason) {
-            ExitReason::Normal  => 'normal exit',
-            ExitReason::Signal  => 'signal',
-            ExitReason::Killed  => 'killed',
+            ExitReason::Normal => 'normal exit',
+            ExitReason::Signal => 'signal',
+            ExitReason::Killed => 'killed',
             ExitReason::Unknown => 'unknown',
         };
         echo "[master] child {$child->pid} exited ({$label})\n";

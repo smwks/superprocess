@@ -139,7 +139,7 @@ class SuperProcess
 
     public function signal(string|int $pid, ProcessSignal $signal): void
     {
-        posix_kill((int) $pid, $signal->value);
+        posix_kill((int) $pid, $signal->signum());
     }
 
     public function run(): void
