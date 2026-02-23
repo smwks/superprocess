@@ -31,6 +31,8 @@ class SuperProcess
 
     protected ?Closure $onChildOutputCallback = null;
 
+    protected ?Closure $onShutdownCallback = null;
+
     /** @var array<int, Child> */
     protected array $children = [];
 
@@ -129,6 +131,13 @@ class SuperProcess
         return $this;
     }
 
+    public function onShutdown(Closure $callback): static
+    {
+        $this->onShutdownCallback = $callback;
+
+        return $this;
+    }
+
     public function sendChildInput(int $pid, string $data): void
     {
         $child = $this->children[$pid] ?? null;
@@ -155,6 +164,10 @@ class SuperProcess
         });
 
         pcntl_signal(SIGTERM, function (): void {
+            $this->shutdownPending = true;
+        });
+
+        pcntl_signal(SIGINT, function (): void {
             $this->shutdownPending = true;
         });
 
@@ -456,6 +469,10 @@ class SuperProcess
 
     protected function shutdown(): void
     {
+        if ($this->onShutdownCallback instanceof \Closure) {
+            ($this->onShutdownCallback)($this);
+        }
+
         // Send SIGTERM to all running children
         foreach ($this->children as $child) {
             posix_kill($child->pid, SIGTERM);

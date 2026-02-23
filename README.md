@@ -68,15 +68,25 @@ On startup `run()` spawns `min` children. When a child exits:
 1. `onChildExit` fires with an `ExitReason`.
 2. If running count drops below `min`, a replacement is spawned with `CreateReason::Replacement`.
 
-The master never exits the event loop on its own — send it `SIGTERM` (or call `signal(posix_getpid(), ProcessSignal::Stop)` from within a callback) to trigger a graceful shutdown.
+The master never exits the event loop on its own — send it `SIGTERM` or `SIGINT` (or call `signal(posix_getpid(), ProcessSignal::Stop)` from within a callback) to trigger a graceful shutdown.
 
 ### Graceful shutdown
 
-On `SIGTERM` the master:
+On `SIGTERM` or `SIGINT` (Ctrl+C) the master:
 
-1. Sends `SIGTERM` to every child.
-2. Waits up to 5 seconds for each to exit.
-3. Sends `SIGKILL` to any that remain.
+1. Runs the `onShutdown` callback, if registered, while all children are still alive.
+2. Sends `SIGTERM` to every child.
+3. Waits up to 5 seconds for each to exit.
+4. Sends `SIGKILL` to any that remain.
+
+The `onShutdown` callback is the right place to flush state, close connections, or send a final message to children before they are signalled:
+
+```php
+$sp->onShutdown(function (SuperProcess $sp): void {
+    echo "Shutting down — waiting for workers to finish current jobs\n";
+})
+->run();
+```
 
 ---
 
@@ -115,6 +125,9 @@ On `SIGTERM` the master:
 
 // Called with raw stdout/stderr data from a command child
 ->onChildOutput(Closure $fn): static   // fn(Child $child, string $data): void
+
+// Called once on shutdown (SIGTERM or SIGINT), before children are signalled
+->onShutdown(Closure $fn): static      // fn(SuperProcess $self): void
 ```
 
 ### Runtime control
@@ -124,7 +137,7 @@ On `SIGTERM` the master:
 ->sendChildInput(int $pid, string $data): void
 
 // Send any POSIX signal to a PID (use ProcessSignal constants)
-->signal(string|int $pid, int $signal): void
+->signal(string|int $pid, ProcessSignal $signal): void
 
 // Spawn one more child (if below max)
 ->scaleUp(): static
@@ -200,7 +213,8 @@ $sp->command('php child-worker.php')
 
 | Signal received by master | Behaviour |
 |---------------------------|-----------|
-| `SIGTERM` | Graceful shutdown — stops the loop, drains children |
+| `SIGTERM` | Graceful shutdown — fires `onShutdown`, then drains children |
+| `SIGINT`  | Graceful shutdown — same as `SIGTERM` (handles Ctrl+C) |
 | `SIGHUP`  | Forwarded to all children |
 | `SIGCHLD` | Internal — triggers zombie reaping and pool replenishment |
 | `SIGUSR1` | Fires `onChildSignal` for every running child |

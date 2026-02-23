@@ -120,6 +120,7 @@ it('returns static from fluent configuration methods', function (): void {
         ->and($sp->onChildSignal($noop))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->onChildMessage($noop))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->onChildOutput($noop))->toBeInstanceOf(SuperProcess::class)
+        ->and($sp->onShutdown($noop))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->closure($noop))->toBeInstanceOf(SuperProcess::class);
 });
 
@@ -199,6 +200,47 @@ it('scaleUp spawns an additional child with ScaleUp create reason', function ():
         ->run();
 
     expect($createReasons)->toBe([CreateReason::Initial, CreateReason::ScaleUp]);
+})->skip(! extension_loaded('pcntl'), 'Requires ext-pcntl and ext-posix');
+
+// ---------------------------------------------------------------------------
+// SuperProcess – graceful shutdown
+// ---------------------------------------------------------------------------
+
+it('onShutdown callback fires and receives the SuperProcess instance on SIGTERM', function (): void {
+    $shutdownFired = false;
+    $receivedInstance = null;
+
+    $sp = new SuperProcess;
+    $sp->closure(function (mixed $socket): void { sleep(60); })
+        ->scaleLimits(1, 1)
+        ->onShutdown(function (SuperProcess $super) use (&$shutdownFired, &$receivedInstance): void {
+            $shutdownFired = true;
+            $receivedInstance = $super;
+        })
+        ->onChildCreate(function (Child $child, CreateReason $reason) use ($sp): void {
+            $sp->signal(posix_getpid(), ProcessSignal::Stop);
+        })
+        ->run();
+
+    expect($shutdownFired)->toBeTrue()
+        ->and($receivedInstance)->toBeInstanceOf(SuperProcess::class);
+})->skip(! extension_loaded('pcntl'), 'Requires ext-pcntl and ext-posix');
+
+it('onShutdown callback fires when SIGINT triggers shutdown', function (): void {
+    $shutdownFired = false;
+
+    $sp = new SuperProcess;
+    $sp->closure(function (mixed $socket): void { sleep(60); })
+        ->scaleLimits(1, 1)
+        ->onShutdown(function (SuperProcess $super) use (&$shutdownFired): void {
+            $shutdownFired = true;
+        })
+        ->onChildCreate(function (Child $child, CreateReason $reason): void {
+            posix_kill(posix_getpid(), SIGINT);
+        })
+        ->run();
+
+    expect($shutdownFired)->toBeTrue();
 })->skip(! extension_loaded('pcntl'), 'Requires ext-pcntl and ext-posix');
 
 it('scaleDown called twice terminates two different children', function (): void {
