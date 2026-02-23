@@ -211,7 +211,9 @@ it('onShutdown callback fires and receives the SuperProcess instance on SIGTERM'
     $receivedInstance = null;
 
     $sp = new SuperProcess;
-    $sp->closure(function (mixed $socket): void { sleep(60); })
+    $sp->closure(function (mixed $socket): void {
+        sleep(60);
+    })
         ->scaleLimits(1, 1)
         ->onShutdown(function (SuperProcess $super) use (&$shutdownFired, &$receivedInstance): void {
             $shutdownFired = true;
@@ -230,7 +232,9 @@ it('onShutdown callback fires when SIGINT triggers shutdown', function (): void 
     $shutdownFired = false;
 
     $sp = new SuperProcess;
-    $sp->closure(function (mixed $socket): void { sleep(60); })
+    $sp->closure(function (mixed $socket): void {
+        sleep(60);
+    })
         ->scaleLimits(1, 1)
         ->onShutdown(function (SuperProcess $super) use (&$shutdownFired): void {
             $shutdownFired = true;
