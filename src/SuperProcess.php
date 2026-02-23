@@ -40,6 +40,10 @@ class SuperProcess
 
     protected bool $shutdownPending = false;
 
+    protected mixed $sigReadPipe = null;
+
+    protected mixed $sigWritePipe = null;
+
     public function command(string $command): static
     {
         $this->command = $command;
@@ -157,18 +161,30 @@ class SuperProcess
             throw new ProcessException('No command or closure configured. Call command() or closure() before run().');
         }
 
+        // Self-pipe: signal handlers write a byte here so stream_select wakes
+        // up immediately instead of waiting for its timeout to expire.
+        $sigPair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($sigPair !== false) {
+            [$this->sigReadPipe, $this->sigWritePipe] = $sigPair;
+            stream_set_blocking($this->sigReadPipe, false);
+            stream_set_blocking($this->sigWritePipe, false);
+        }
+
         pcntl_async_signals(true);
 
         pcntl_signal(SIGCHLD, function (): void {
             $this->sigchldPending = true;
+            $this->wakeEventLoop();
         });
 
         pcntl_signal(SIGTERM, function (): void {
             $this->shutdownPending = true;
+            $this->wakeEventLoop();
         });
 
         pcntl_signal(SIGINT, function (): void {
             $this->shutdownPending = true;
+            $this->wakeEventLoop();
         });
 
         pcntl_signal(SIGHUP, function (): void {
@@ -196,8 +212,11 @@ class SuperProcess
         $lastHeartbeat = time();
 
         while (! $this->shutdownPending) {
-            // Collect readable streams from all children
+            // Collect readable streams: signal pipe first, then all child streams.
             $read = [];
+            if (is_resource($this->sigReadPipe)) {
+                $read[] = $this->sigReadPipe;
+            }
             foreach ($this->children as $child) {
                 foreach ($child->readableStreams() as $stream) {
                     $read[] = $stream;
@@ -211,6 +230,12 @@ class SuperProcess
 
                 if ($changed !== false && $changed > 0) {
                     foreach ($read as $stream) {
+                        if ($stream === $this->sigReadPipe) {
+                            // Drain the wakeup bytes; actual flags were set by the handler.
+                            fread($stream, 65536);
+
+                            continue;
+                        }
                         $this->dispatchStreamData($stream);
                     }
                 }
@@ -234,6 +259,21 @@ class SuperProcess
         }
 
         $this->shutdown();
+
+        foreach ([$this->sigReadPipe, $this->sigWritePipe] as $pipe) {
+            if (is_resource($pipe)) {
+                fclose($pipe);
+            }
+        }
+        $this->sigReadPipe = null;
+        $this->sigWritePipe = null;
+    }
+
+    protected function wakeEventLoop(): void
+    {
+        if (is_resource($this->sigWritePipe)) {
+            @fwrite($this->sigWritePipe, "\x00");
+        }
     }
 
     protected function spawnChild(CreateReason $reason): Child
