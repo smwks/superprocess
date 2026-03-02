@@ -78,15 +78,15 @@ $sp->closure(function (mixed $socket): void {
 ```php
 use SMWks\SuperProcess\SuperProcess;
 
-// Every 5 seconds the master checks the database and adjusts the pool.
+// Every 5 seconds the master checks the queue depth and adjusts the pool.
 $sp = new SuperProcess;
 $sp->command('php artisan queue:work')
    ->scaleLimits(min: 1, max: 20)
    ->heartbeat(5, function (SuperProcess $sp): void {
-       $desired = (int) DB::scalar('SELECT desired_workers FROM worker_config');
-       $sp->scaleLimits(min: $desired, max: $desired)
-          ->scaleUp()    // spawns one worker if pool is below the new limit
-          ->scaleDown(); // stops  one worker if pool is above the new limit
+       $depth = (int) DB::scalar('SELECT COUNT(*) FROM jobs WHERE queue = ?', ['default']);
+
+       if ($depth > 100) { $sp->scaleUp();   } // no-op if already at max
+       if ($depth < 10)  { $sp->scaleDown(); } // no-op if already at min
    })
    ->run();
 ```
@@ -136,25 +136,21 @@ The master never exits the event loop on its own — send it `SIGTERM` or `SIGIN
 
 `heartbeat(int $intervalSeconds, Closure $fn)` registers a callback that fires on the master process at a regular interval throughout the event loop. The callback receives the live `SuperProcess` instance, giving it full runtime control.
 
-This is the primary mechanism for **externally-driven pool management**. Instead of sizing the pool statically at startup, query whatever source of truth you have — a database flag, a queue depth, a config value — and adjust the running count to match:
+This is the primary mechanism for **externally-driven pool management**. Instead of sizing the pool statically at startup, query whatever source of truth you have — a queue depth, a database flag, a config value — and nudge the pool toward the right size:
 
 ```php
 $sp->command('php artisan queue:work')
    ->scaleLimits(min: 1, max: 20)
    ->heartbeat(5, function (SuperProcess $sp): void {
-       // Ask the database how many workers the operator wants right now.
-       $desired = (int) DB::scalar('SELECT desired_workers FROM worker_config');
+       $depth = (int) DB::scalar('SELECT COUNT(*) FROM jobs WHERE queue = ?', ['default']);
 
-       // Re-pin the limits and nudge the pool one step toward the new target.
-       // scaleUp() and scaleDown() are no-ops when already at the limit.
-       $sp->scaleLimits(min: $desired, max: $desired)
-          ->scaleUp()    // spawns one worker if the pool is below the new limit
-          ->scaleDown(); // stops  one worker if the pool is above the new limit
+       if ($depth > 100) { $sp->scaleUp();   } // no-op if already at max
+       if ($depth < 10)  { $sp->scaleDown(); } // no-op if already at min
    })
    ->run();
 ```
 
-Because the heartbeat runs on the master — the process that owns the event loop — it is single-threaded and safe to call without locks. `scaleUp()` spawns a replacement immediately; `scaleDown()` sends `SIGTERM` to one child and lets the pool settle naturally.
+Because the heartbeat runs on the master — the process that owns the event loop — it is single-threaded and safe to call without locks. `scaleUp()` and `scaleDown()` each step by one and are no-ops when the pool is already at the configured limit.
 
 ### Graceful shutdown
 
