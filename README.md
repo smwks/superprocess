@@ -1,6 +1,27 @@
 # SuperProcess
 
+<div align="center">
+<pre>
++--------------------------------+
+|                                |
+|  >> SuperProcess               |
+|                                |
+|  [master] --+--> [worker]      |
+|             +--> [worker]      |
+|             +--> [worker]      |
+|                                |
+|  fork · supervise · scale      |
++--------------------------------+
+</pre>
+</div>
+
 A fluent PHP library for supervised master-child process control using `pcntl` and pipes. Run one or more copies of a command or PHP closure, keep them alive automatically, communicate with them via stdin/stdout and a structured IPC channel, and scale the pool up or down at runtime.
+
+Two features define SuperProcess:
+
+- **Closures fork.** Pass `closure()` any PHP closure and it becomes an independent OS process — no serialisation boilerplate, no separate file. The closure runs in a `pcntl_fork()` copy of the master, with a socket wired back for structured IPC.
+
+- **The heartbeat drives the pool.** Register a periodic callback that fires on the master process. Inside it you have full control: query a database, read a queue depth, inspect a config value — then call `scaleUp()` or `scaleDown()` to match worker supply to real-time demand.
 
 > **Requires PHP 8.4+, `ext-pcntl`, `ext-posix` — Linux and macOS only.**
 
@@ -16,6 +37,8 @@ composer require smwks/superprocess
 
 ## Quick start
 
+**Supervise a pool of command workers:**
+
 ```php
 use SMWks\SuperProcess\Child;
 use SMWks\SuperProcess\CreateReason;
@@ -29,6 +52,43 @@ $sp->command('php artisan inspire:loop')
    ->onChildExit(fn (Child $c, ExitReason $r)    => printf("[master] %d exited\n",   $c->pid))
    ->onChildOutput(fn (Child $c, string $data)   => print $data)
    ->run(); // blocks until SIGTERM is received
+```
+
+**Fork a closure as a worker process:**
+
+```php
+use SMWks\SuperProcess\Child;
+use SMWks\SuperProcess\SuperProcess;
+
+// The closure is forked by the master — no separate file needed.
+$sp = new SuperProcess;
+$sp->closure(function (mixed $socket): void {
+        for ($i = 1; $i <= 5; $i++) {
+            fwrite($socket, json_encode(['step' => $i]) . "\n");
+            sleep(1);
+        }
+    })
+    ->scaleLimits(min: 3, max: 3)
+    ->onChildMessage(fn (Child $c, mixed $msg) => printf("[%d] step %d\n", $c->pid, $msg['step']))
+    ->run();
+```
+
+**Drive pool size from an external source via heartbeat:**
+
+```php
+use SMWks\SuperProcess\SuperProcess;
+
+// Every 5 seconds the master checks the database and adjusts the pool.
+$sp = new SuperProcess;
+$sp->command('php artisan queue:work')
+   ->scaleLimits(min: 1, max: 20)
+   ->heartbeat(5, function (SuperProcess $sp): void {
+       $desired = (int) DB::scalar('SELECT desired_workers FROM worker_config');
+       $sp->scaleLimits(min: $desired, max: $desired)
+          ->scaleUp()    // spawns one worker if pool is below the new limit
+          ->scaleDown(); // stops  one worker if pool is above the new limit
+   })
+   ->run();
 ```
 
 ---
@@ -61,6 +121,8 @@ $sp->closure(function (mixed $socket): void {
 });
 ```
 
+The closure captures its surrounding scope at the moment `run()` is called — that is when the fork actually happens. Any variable in scope at that point is available inside the child. Because the fork copies the master's entire memory image, expensive one-time work (bootstrapping a framework, parsing config, establishing a schema) is paid once in the master and shared copy-on-write across every worker.
+
 ### Child lifecycle
 
 On startup `run()` spawns `min` children. When a child exits:
@@ -69,6 +131,30 @@ On startup `run()` spawns `min` children. When a child exits:
 2. If running count drops below `min`, a replacement is spawned with `CreateReason::Replacement`.
 
 The master never exits the event loop on its own — send it `SIGTERM` or `SIGINT` (or call `signal(posix_getpid(), ProcessSignal::Stop)` from within a callback) to trigger a graceful shutdown.
+
+### Heartbeat
+
+`heartbeat(int $intervalSeconds, Closure $fn)` registers a callback that fires on the master process at a regular interval throughout the event loop. The callback receives the live `SuperProcess` instance, giving it full runtime control.
+
+This is the primary mechanism for **externally-driven pool management**. Instead of sizing the pool statically at startup, query whatever source of truth you have — a database flag, a queue depth, a config value — and adjust the running count to match:
+
+```php
+$sp->command('php artisan queue:work')
+   ->scaleLimits(min: 1, max: 20)
+   ->heartbeat(5, function (SuperProcess $sp): void {
+       // Ask the database how many workers the operator wants right now.
+       $desired = (int) DB::scalar('SELECT desired_workers FROM worker_config');
+
+       // Re-pin the limits and nudge the pool one step toward the new target.
+       // scaleUp() and scaleDown() are no-ops when already at the limit.
+       $sp->scaleLimits(min: $desired, max: $desired)
+          ->scaleUp()    // spawns one worker if the pool is below the new limit
+          ->scaleDown(); // stops  one worker if the pool is above the new limit
+   })
+   ->run();
+```
+
+Because the heartbeat runs on the master — the process that owns the event loop — it is single-threaded and safe to call without locks. `scaleUp()` spawns a replacement immediately; `scaleDown()` sends `SIGTERM` to one child and lets the pool settle naturally.
 
 ### Graceful shutdown
 
