@@ -170,7 +170,7 @@ class SuperProcess
 
     public function run(): void
     {
-        if ($this->command === null && ! $this->closure instanceof \Closure) {
+        if ($this->command === null && ! $this->closure instanceof Closure) {
             throw new ProcessException('No command or closure configured. Call command() or closure() before run().');
         }
 
@@ -258,7 +258,7 @@ class SuperProcess
             }
 
             // Heartbeat
-            if ($this->heartbeatInterval > 0 && $this->heartbeatCallback instanceof \Closure && time() - $lastHeartbeat >= $this->heartbeatInterval) {
+            if ($this->heartbeatInterval > 0 && $this->heartbeatCallback instanceof Closure && time() - $lastHeartbeat >= $this->heartbeatInterval) {
                 ($this->heartbeatCallback)($this);
                 $lastHeartbeat = time();
             }
@@ -359,7 +359,7 @@ class SuperProcess
         if ($pid === 0) {
             // Child process
             fclose($parentSocket);
-            assert($this->closure instanceof \Closure);
+            assert($this->closure instanceof Closure);
             try {
                 ($this->closure)($childSocket);
             } finally {
@@ -403,7 +403,7 @@ class SuperProcess
 
         if ($stream === $child->ipcChannel) {
             $this->dispatchChildMessage($child, $data);
-        } elseif ($this->onChildOutputCallback instanceof \Closure) {
+        } elseif ($this->onChildOutputCallback instanceof Closure) {
             $outputStream = $stream === $child->stdout ? OutputStream::Stdout : OutputStream::Stderr;
             ($this->onChildOutputCallback)($child, $data, $outputStream);
         }
@@ -411,7 +411,7 @@ class SuperProcess
 
     protected function dispatchChildMessage(Child $child, string $rawData): void
     {
-        if (! $this->onChildMessageCallback instanceof \Closure) {
+        if (! $this->onChildMessageCallback instanceof Closure) {
             return;
         }
 
@@ -429,7 +429,7 @@ class SuperProcess
 
     protected function dispatchChildSignalToAll(int $signal): void
     {
-        if (! $this->onChildSignalCallback instanceof \Closure) {
+        if (! $this->onChildSignalCallback instanceof Closure) {
             return;
         }
 
@@ -478,7 +478,7 @@ class SuperProcess
             $exitedChild->exitCode = $exitCode;
             $exitedChild->exitReason = $exitReason;
 
-            if ($this->onChildExitCallback instanceof \Closure) {
+            if ($this->onChildExitCallback instanceof Closure) {
                 ($this->onChildExitCallback)($exitedChild, $exitReason);
             }
         }
@@ -526,7 +526,7 @@ class SuperProcess
 
     protected function shutdown(): void
     {
-        if ($this->onShutdownCallback instanceof \Closure) {
+        if ($this->onShutdownCallback instanceof Closure) {
             ($this->onShutdownCallback)($this);
         }
 
@@ -565,7 +565,7 @@ class SuperProcess
 
     protected function fireOnChildCreate(Child $child): void
     {
-        if ($this->onChildCreateCallback instanceof \Closure) {
+        if ($this->onChildCreateCallback instanceof Closure) {
             ($this->onChildCreateCallback)($child, $child->createReason);
         }
     }
