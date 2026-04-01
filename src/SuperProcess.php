@@ -9,7 +9,11 @@ use SMWks\SuperProcess\Exceptions\ProcessException;
 
 class SuperProcess
 {
-    protected ?string $command = null;
+    /** @var string|list<string>|null */
+    protected string|array|null $command = null;
+
+    /** @var array<string, string>|null */
+    protected ?array $env = null;
 
     protected ?Closure $closure = null;
 
@@ -44,9 +48,18 @@ class SuperProcess
 
     protected mixed $sigWritePipe = null;
 
-    public function command(string $command): static
+    /** @param string|list<string> $command */
+    public function command(string|array $command): static
     {
         $this->command = $command;
+
+        return $this;
+    }
+
+    /** @param array<string, string> $vars */
+    public function env(array $vars): static
+    {
+        $this->env = $vars;
 
         return $this;
     }
@@ -87,7 +100,7 @@ class SuperProcess
 
     public function scaleDown(): static
     {
-        $active = array_filter($this->children, fn (Child $c) => ! $c->terminating);
+        $active = array_filter($this->children, fn (Child $c): bool => ! $c->terminating);
 
         if (count($active) > $this->minChildren) {
             $child = reset($active);
@@ -294,11 +307,15 @@ class SuperProcess
             3 => ['pipe', 'w'],  // fd3    – structured messages (onChildMessage)
         ];
 
+        $command = $this->command;
+        assert($command !== null);
+
         $pipes = [];
-        $process = proc_open((string) $this->command, $descriptors, $pipes);
+        $process = proc_open($command, $descriptors, $pipes, null, $this->env);
 
         if (! is_resource($process)) {
-            throw new ProcessException(sprintf('Failed to start command: %s', $this->command));
+            $display = is_array($command) ? implode(' ', $command) : $command;
+            throw new ProcessException(sprintf('Failed to start command: %s', $display));
         }
 
         /** @var array{0: resource, 1: resource, 2: resource, 3: resource} $pipes */
@@ -387,8 +404,8 @@ class SuperProcess
         if ($stream === $child->ipcChannel) {
             $this->dispatchChildMessage($child, $data);
         } elseif ($this->onChildOutputCallback instanceof \Closure) {
-            // stdout or stderr
-            ($this->onChildOutputCallback)($child, $data);
+            $outputStream = $stream === $child->stdout ? OutputStream::Stdout : OutputStream::Stderr;
+            ($this->onChildOutputCallback)($child, $data, $outputStream);
         }
     }
 
@@ -470,7 +487,7 @@ class SuperProcess
     protected function resolveExitReason(int $status): ExitReason
     {
         if (pcntl_wifexited($status)) {
-            return pcntl_wexitstatus($status) === 0 ? ExitReason::Normal : ExitReason::Normal;
+            return pcntl_wexitstatus($status) === 0 ? ExitReason::Normal : ExitReason::Error;
         }
 
         if (pcntl_wifsignaled($status)) {
@@ -555,6 +572,6 @@ class SuperProcess
 
     protected function findChildByStream(mixed $stream): ?Child
     {
-        return array_find($this->children, fn ($child) => in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true));
+        return array_find($this->children, fn ($child): bool => in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true));
     }
 }
