@@ -4,6 +4,7 @@ use SMWks\SuperProcess\Child;
 use SMWks\SuperProcess\CreateReason;
 use SMWks\SuperProcess\Exceptions\ProcessException;
 use SMWks\SuperProcess\ExitReason;
+use SMWks\SuperProcess\OutputStream;
 use SMWks\SuperProcess\ProcessSignal;
 use SMWks\SuperProcess\SuperProcess;
 
@@ -35,9 +36,19 @@ it('has the expected CreateReason cases', function (): void {
 
 it('has the expected ExitReason cases', function (): void {
     expect(ExitReason::Normal->name)->toBe('Normal')
+        ->and(ExitReason::Error->name)->toBe('Error')
         ->and(ExitReason::Signal->name)->toBe('Signal')
         ->and(ExitReason::Killed->name)->toBe('Killed')
         ->and(ExitReason::Unknown->name)->toBe('Unknown');
+});
+
+// ---------------------------------------------------------------------------
+// OutputStream enum
+// ---------------------------------------------------------------------------
+
+it('has the expected OutputStream cases', function (): void {
+    expect(OutputStream::Stdout->value)->toBe('stdout')
+        ->and(OutputStream::Stderr->value)->toBe('stderr');
 });
 
 // ---------------------------------------------------------------------------
@@ -113,6 +124,8 @@ it('returns static from fluent configuration methods', function (): void {
     $noop = function (): void {};
 
     expect($sp->command('echo hello'))->toBeInstanceOf(SuperProcess::class)
+        ->and($sp->command(['echo', 'hello']))->toBeInstanceOf(SuperProcess::class)
+        ->and($sp->env(['FOO' => 'bar']))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->scaleLimits(1, 3))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->heartbeat(30, $noop))->toBeInstanceOf(SuperProcess::class)
         ->and($sp->onChildCreate($noop))->toBeInstanceOf(SuperProcess::class)
