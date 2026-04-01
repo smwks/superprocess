@@ -13,7 +13,12 @@ use SMWks\SuperProcess\SuperProcess;
 // ---------------------------------------------------------------------------
 
 it('defines expected signal values', function (): void {
-    expect(ProcessSignal::Stop->signum())->toBe(SIGTERM)
+    expect(ProcessSignal::Stop->value)->toBe('STOP')
+        ->and(ProcessSignal::Kill->value)->toBe('KILL')
+        ->and(ProcessSignal::Reload->value)->toBe('RELOAD')
+        ->and(ProcessSignal::Usr1->value)->toBe('USR1')
+        ->and(ProcessSignal::Usr2->value)->toBe('USR2')
+        ->and(ProcessSignal::Stop->signum())->toBe(SIGTERM)
         ->and(ProcessSignal::Kill->signum())->toBe(SIGKILL)
         ->and(ProcessSignal::Reload->signum())->toBe(SIGHUP)
         ->and(ProcessSignal::Usr1->signum())->toBe(SIGUSR1)

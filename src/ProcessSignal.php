@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace SMWks\SuperProcess;
 
-enum ProcessSignal
+enum ProcessSignal: string
 {
-    case Stop;
-    case Kill;
-    case Reload;
-    case Usr1;
-    case Usr2;
+    case Stop = 'STOP';
+    case Kill = 'KILL';
+    case Reload = 'RELOAD';
+    case Usr1 = 'USR1';
+    case Usr2 = 'USR2';
 
     public function signum(): int
     {
