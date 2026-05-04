@@ -357,7 +357,40 @@ class SuperProcess
         }
 
         if ($pid === 0) {
-            // Child process
+            // Child process: clean up inherited master state before running the closure.
+
+            // Reset signal handlers FIRST — before any other code. The child must
+            // not run the master's event-loop handlers (e.g. the SIGTERM handler
+            // that only sets $shutdownPending and returns). Instead we register
+            // handlers that call exit() with restart_syscalls=false so that
+            // SA_RESTART=0 is used, allowing SIGTERM/SIGINT to interrupt blocking
+            // syscalls like sleep() immediately rather than waiting for them to
+            // return naturally.
+            foreach ([SIGTERM, SIGINT] as $sig) {
+                pcntl_signal($sig, static function (): void {
+                    exit(0);
+                }, false);
+            }
+            foreach ([SIGHUP, SIGCHLD, SIGUSR1, SIGUSR2] as $sig) {
+                pcntl_signal($sig, SIG_DFL);
+            }
+
+            // Close inherited master self-pipe FDs (child has no event loop).
+            foreach ([$this->sigReadPipe, $this->sigWritePipe] as $pipe) {
+                if (is_resource($pipe)) {
+                    fclose($pipe);
+                }
+            }
+
+            // Close inherited sibling ipcChannels to avoid holding them open.
+            foreach ($this->children as $sibling) {
+                foreach ([$sibling->stdin, $sibling->stdout, $sibling->stderr, $sibling->ipcChannel] as $fd) {
+                    if (is_resource($fd)) {
+                        fclose($fd);
+                    }
+                }
+            }
+
             fclose($parentSocket);
             assert($this->closure instanceof Closure);
             try {
@@ -572,6 +605,12 @@ class SuperProcess
 
     protected function findChildByStream(mixed $stream): ?Child
     {
-        return array_find($this->children, fn ($child): bool => in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true));
+        foreach ($this->children as $child) {
+            if (in_array($stream, [$child->stdout, $child->stderr, $child->ipcChannel], true)) {
+                return $child;
+            }
+        }
+
+        return null;
     }
 }
